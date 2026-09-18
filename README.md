@@ -87,7 +87,7 @@ So it is safe to keep the runner configured permanently.
 
 `LiveRunner` uses the "live" formatter on the console if you did not select
 another console formatter (it replaces behave's default formatter).
-`behave -f plain` shows the plain formatter as usual, without the view.
+`behave -f pretty` or `-f plain` show that formatter as usual, without the view.
 Formatters that write to an output file (`-f json -o report.json`) are kept.
 
 To use the format name `live` yourself (for example with `--outfile`),

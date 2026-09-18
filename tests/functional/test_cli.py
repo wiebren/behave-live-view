@@ -80,6 +80,16 @@ def test_another_console_formatter_is_respected(workdir):
     assert "✔ Feature: Bob" not in result.output
 
 
+def test_default_formatter_of_behave_is_respected_if_selected(workdir):
+    # -- HINT: "pretty" is the default formatter that is replaced otherwise.
+    result = run_behave(workdir, "-f pretty --no-color features/bob.feature")
+    assert result.returncode == 0, result
+    assert RUNNER_NAME in result.output
+    assert "Scenario: B1" in result.output
+    assert "# features/bob.feature:2" in result.output  # -- FORMATTER: pretty
+    assert "✔ Feature: Bob" not in result.output
+
+
 def test_formatter_with_output_file_is_kept(workdir):
     result = run_behave(workdir, "-f json -o report.json --no-color "
                                  "features/bob.feature")

@@ -127,6 +127,33 @@ class TestUseLiveFormat:
         LiveRunner(config)
         assert config.format == expected
 
+    @pytest.mark.parametrize("command_args", [
+        ["-f", "pretty"], ["--format=pretty"], ["--form", "pretty"],
+        ["-qf", "pretty"],      # -- CLUSTERED: Short options.
+    ])
+    def test_default_formatter_is_kept_if_selected_on_command_line(
+            self, command_args):
+        config = make_config(command_args)
+        config.command_args = command_args
+        assert config.default_format == "pretty"
+        LiveRunner(config)
+        assert config.format == ["pretty"]
+
+    def test_option_value_is_not_taken_for_a_format_option(self):
+        command_args = ["--name=-fpretty"]
+        config = make_config(command_args)
+        config.command_args = command_args
+        LiveRunner(config)
+        assert config.format == [LIVE_FORMAT]
+
+    def test_unknown_command_line_means_default_is_replaced(self, monkeypatch):
+        # -- HINT: Not started by the "behave" command (like: these tests).
+        monkeypatch.setattr("sys.argv", ["my_testrunner.py", "-f", "pretty"])
+        config = make_config()
+        assert LiveRunner.select_command_line_formats(config) is None
+        LiveRunner(config)
+        assert config.format == [LIVE_FORMAT]
+
     def test_formatter_with_output_file_is_kept(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         config = make_config(["-f", "pretty", "-o", "pretty.txt"])

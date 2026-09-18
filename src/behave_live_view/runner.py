@@ -17,9 +17,11 @@ behave runner do this -- in a background thread while the view is shown,
 otherwise (no terminal, another console formatter, ...) directly.
 """
 
+import os.path
 import sys
 
 from behave.api.runner import ITestRunner
+from behave.configuration import setup_parser
 from behave.exception import ConfigError
 from behave.runner_plugin import RunnerPlugin
 
@@ -112,14 +114,40 @@ class LiveRunner(ITestRunner):
         return runner_class
 
     @staticmethod
-    def use_live_format(config):
+    def select_command_line_formats(config):
+        """Select the formats that were selected on the command line.
+
+        :return: List of format names (or None, if this is unknown).
+        """
+        # -- HINT: A configuration may describe how it was built.
+        command_args = getattr(config, "command_args", None)
+        if not isinstance(command_args, (list, tuple)):
+            # -- SAME RULE AS BEHAVE: Command line is only used by "behave".
+            command_name = os.path.basename(sys.argv[0])
+            if not ("behave" in command_name or "behave" in sys.argv
+                    or "behave/__main__" in sys.argv[0].replace("\\", "/")):
+                return None
+            command_args = sys.argv[1:]
+        try:
+            # -- HINT: Knows abbreviated and clustered options, too.
+            args, _ = setup_parser().parse_known_args(list(command_args))
+        except (Exception, SystemExit):     # pylint: disable=broad-except
+            return None
+        return list(args.format or [])
+
+    @classmethod
+    def use_live_format(cls, config):
         """Use the "live" formatter on the console, unless the user has
         selected another formatter for it.
 
         HINT: behave has already replaced "no formatter selected" with its
-        default formatter when a runner is created.
+        default formatter when a runner is created. Therefore, the default
+        formatter is only kept if it was selected on the command line.
         """
         formats = list(config.format or [config.default_format])
+        command_line_formats = cls.select_command_line_formats(config) or []
+        if config.default_format in command_line_formats:
+            return      # -- USER: Has selected behave's default formatter.
         console_indexes = LiveHost.select_console_format_indexes(config)
         live_indexes = [index for index in console_indexes
                         if LiveHost.is_live_format(formats[index])]
