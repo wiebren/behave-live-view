@@ -6,12 +6,16 @@ run in the terminal: one compact status line per feature, rule, scenario
 expand, filter, open in your editor and run again while the view stays open.
 
 It needs no patched behave: it plugs into behave's runner and formatter
-extension-points and works with the released `behave >= 1.3.3`.
+extension-points. It requires `behave >= 1.4.0`.
 
 ## Installation
 
+behave v1.4.0 is not released yet. Until it is, install behave from its
+repository, too:
+
 ```console
-$ pip install git+https://github.com/wiebren/behave-live-view
+$ pip install git+https://github.com/behave/behave@main \
+              git+https://github.com/wiebren/behave-live-view
 ```
 
 Select the runner in your behave config-file -- that is all:
@@ -111,12 +115,6 @@ Another runner class can run the tests (it must be a normal behave runner):
   arrives when the thread executes Python code again: a long blocking call
   (like one `time.sleep(60)`) ends first.
 * **`--jobs` is not supported:** the tests run sequentially.
-* **Captured output of steps:** two bugs in behave's capture of output affect
-  what a step shows when it is opened. Until behave has the fixes
-  ([behave#1346](https://github.com/behave/behave/pull/1346),
-  [behave#1347](https://github.com/behave/behave/pull/1347)):
-  the output of the first step(s) of a scenario may be missing or cut off, and
-  log output is missing after a `before_scenario` hook was captured.
 * A rerun reloads step files and changed Python modules of your project.
   Changes that cannot be reloaded are shown as a warning; restart behave then.
 

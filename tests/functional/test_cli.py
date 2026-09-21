@@ -164,3 +164,45 @@ def test_undefined_steps_are_reported(workdir):
     assert "You can implement step definitions for undefined steps" \
         in result.output
     assert "an unknown step is used" in result.output
+
+
+# -----------------------------------------------------------------------------
+# CAPTURED OUTPUT: Needs behave >= 1.4.0
+# -----------------------------------------------------------------------------
+def test_captured_output_of_each_failed_step_is_complete(workdir):
+    """REQUIRES: behave >= 1.4.0 -- before, the output of the first step(s)
+    of each following scenario was missing or cut off (behave #1346) and the
+    log output was missing after a "before_scenario" hook (behave #1347).
+    """
+    workdir.write_file("features/steps/output_steps.py", u"""
+        import logging
+        from behave import step
+
+        @step('I print "{text}" and log "{message}" and fail')
+        def step_print_log_fail(context, text, message):
+            print(text)
+            logging.getLogger("example").warning(message)
+            assert False, "XFAIL-STEP"
+        """)
+    workdir.write_file("features/environment.py", u"""
+        def before_scenario(context, scenario):
+            pass
+        """)
+    workdir.write_file("features/output.feature", u"""
+        Feature: Output
+          Scenario: First
+            Given I print "FIRST: a rather long line of output" and log "LOG-ONE" and fail
+          Scenario: Second
+            Given I print "SECOND: hello" and log "LOG-TWO" and fail
+        """)
+    result = run_behave(workdir, "--no-color --no-summary "
+                                 "features/output.feature")
+    assert result.returncode == 1, result
+    for stdout_text, log_text in [
+            ("FIRST: a rather long line of output", "LOG-ONE"),
+            ("SECOND: hello", "LOG-TWO")]:
+        expected = ("      stdout:\n"
+                    "      %s\n"
+                    "      log:\n"
+                    "      LOG_WARNING:example: %s\n" % (stdout_text, log_text))
+        assert expected in result.output, result
