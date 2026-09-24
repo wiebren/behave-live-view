@@ -17,7 +17,6 @@ behave runner do this -- in a background thread while the view is shown,
 otherwise (no terminal, another console formatter, ...) directly.
 """
 
-import os.path
 import sys
 
 from behave.api.runner import ITestRunner
@@ -119,15 +118,11 @@ class LiveRunner(ITestRunner):
 
         :return: List of format names (or None, if this is unknown).
         """
-        # -- HINT: A configuration may describe how it was built.
+        # -- HINT: A configuration remembers how it was built (behave v1.4.0),
+        # the command line of the "behave" command is resolved already.
         command_args = getattr(config, "command_args", None)
         if not isinstance(command_args, (list, tuple)):
-            # -- SAME RULE AS BEHAVE: Command line is only used by "behave".
-            command_name = os.path.basename(sys.argv[0])
-            if not ("behave" in command_name or "behave" in sys.argv
-                    or "behave/__main__" in sys.argv[0].replace("\\", "/")):
-                return None
-            command_args = sys.argv[1:]
+            return None
         try:
             # -- HINT: Knows abbreviated and clustered options, too.
             args, _ = setup_parser().parse_known_args(list(command_args))

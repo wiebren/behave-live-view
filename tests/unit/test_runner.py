@@ -134,22 +134,28 @@ class TestUseLiveFormat:
     def test_default_formatter_is_kept_if_selected_on_command_line(
             self, command_args):
         config = make_config(command_args)
-        config.command_args = command_args
+        assert config.command_args == command_args
         assert config.default_format == "pretty"
         LiveRunner(config)
         assert config.format == ["pretty"]
 
     def test_option_value_is_not_taken_for_a_format_option(self):
-        command_args = ["--name=-fpretty"]
-        config = make_config(command_args)
-        config.command_args = command_args
+        config = make_config(["--name=-fpretty"])
         LiveRunner(config)
         assert config.format == [LIVE_FORMAT]
 
-    def test_unknown_command_line_means_default_is_replaced(self, monkeypatch):
+    def test_command_line_of_another_program_is_not_used(self, monkeypatch):
         # -- HINT: Not started by the "behave" command (like: these tests).
         monkeypatch.setattr("sys.argv", ["my_testrunner.py", "-f", "pretty"])
         config = make_config()
+        assert LiveRunner.select_command_line_formats(config) == []
+        LiveRunner(config)
+        assert config.format == [LIVE_FORMAT]
+
+    def test_unknown_command_line_means_default_is_replaced(self):
+        # -- HINT: A behave version that does not remember its command line.
+        config = make_config(["-f", "pretty"])
+        del config.command_args
         assert LiveRunner.select_command_line_formats(config) is None
         LiveRunner(config)
         assert config.format == [LIVE_FORMAT]
