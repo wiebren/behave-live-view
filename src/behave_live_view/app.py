@@ -462,7 +462,7 @@ class LiveApp(App):
 
     def __init__(self, status_tree=None, on_interrupt=None, on_rerun=None,
                  on_check_changes=None, on_open=None, on_copy=None,
-                 **kwargs):
+                 parallel=False, **kwargs):
         kwargs.setdefault("ansi_color", True)
         super(LiveApp, self).__init__(**kwargs)
         self.status_tree = status_tree or StatusTree()
@@ -483,6 +483,8 @@ class LiveApp(App):
         self.interrupting = False
         #: FOLLOW MODE: Cursor follows the execution point of the test run.
         self.follow = True
+        #: PARALLEL TEST RUN: Many tests run at the same time (--jobs N).
+        self.parallel = parallel
         # -- TREE MAPPING: id(model_node) -> TreeNode (materialized nodes).
         self._tree_nodes = {}
         self._materialized = set()  # -- id(model_node): Children exist.
@@ -628,8 +630,19 @@ class LiveApp(App):
         self.interrupting = False
         self._last_point = None
         self._flush_updates()
+        if self.parallel:
+            self._auto_expand_failures()    # -- KEPT STILL: Until now.
         self._ensure_cursor()
         self.refresh_bindings()     # -- SHOW: The rerun keys (footer).
+
+    @property
+    def keeps_tree_still(self):
+        """Check if the tree must not be expanded automatically now: while
+        a parallel test run runs, following its execution points and
+        expanding its failures would let the lines jump all the time.
+        The failures are expanded when the test run has ended.
+        """
+        return self.parallel and not self.is_done
 
     def _has_failed_cursor(self):
         """Check if the cursor is on a failed line (or inside of one)."""
@@ -710,7 +723,8 @@ class LiveApp(App):
                 self._running_nodes.pop(id(node), None)
             self._refresh_label(node)
             if (node.kind == KIND_SCENARIO and node.state == FAILED
-                    and id(node) not in self._auto_expanded):
+                    and id(node) not in self._auto_expanded
+                    and not self.keeps_tree_still):
                 # -- AUTO-EXPAND (once): Show why this scenario has failed.
                 self._auto_expand_failure(node)
             elif node.is_final:
@@ -1011,7 +1025,7 @@ class LiveApp(App):
     # -------------------------------------------------------------------------
     def _follow_execution_point(self):
         """Move the cursor to the running step/scenario (if: follow mode)."""
-        if not self.follow or self.is_done:
+        if not self.follow or self.is_done or self.keeps_tree_still:
             return
         point = self.status_tree.execution_point
         if point is None or point is self._last_point:
@@ -1303,6 +1317,8 @@ class LiveApp(App):
 
     def _auto_expand_failures(self):
         """Expand the failed scenarios that are shown now (once each)."""
+        if self.keeps_tree_still:
+            return
         for node in self.visible_failed_nodes():
             if (node.kind == KIND_SCENARIO
                     and id(node) not in self._auto_expanded):

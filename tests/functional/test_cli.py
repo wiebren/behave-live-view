@@ -129,10 +129,10 @@ def test_dry_run_works(workdir):
     assert "Traceback" not in result.output
 
 
-def test_jobs_option_is_not_supported(workdir):
+def test_jobs_option_needs_a_parallel_runner(workdir):
     result = run_behave(workdir, "--jobs=2 --no-color features/bob.feature")
     assert result.returncode == 0, result
-    assert "live-view: --jobs=2 is not supported" in result.output
+    assert "live-view: --jobs=2 needs a parallel test runner" in result.output
     assert "✔ Feature: Bob  1/1" in result.output
 
 

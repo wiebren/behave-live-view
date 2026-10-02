@@ -106,6 +106,38 @@ live = behave_live_view:LiveFormatter
 Another runner class can run the tests (it must be a normal behave runner):
 `behave -D live_view.runner=my.package:MyRunner`.
 
+## Parallel test runs
+
+With [behave-parallel-runner](https://github.com/wiebren/behave-parallel-runner),
+the features run in worker processes and the view shows all of them while
+they run. Let it run the tests:
+
+```ini
+# -- FILE: behave.ini
+[behave]
+runner = behave_live_view:LiveRunner
+
+[behave.userdata]
+live_view.runner = behave_parallel_runner:ParallelRunner
+```
+
+and use `behave --jobs 4` (or `-D live_view.runner=...` on the command line).
+
+* The "live" formatter of each worker process sends its events to the view
+  in the parent process over a local connection (authenticated). The
+  userdata parameter `live_view.events` tells the workers where; the
+  parallel runner sends the userdata to its workers.
+* The view keeps still while the parallel test run runs: it does not
+  follow the running steps and does not expand failures (`e` does) --
+  many tests run at the same time. When the test run has ended, the
+  failures are expanded and the cursor is put on the first one.
+* A rerun (`r` / `R`) starts new worker processes, which load the current
+  step files.
+* `q` / `ctrl+c` stops the test run like a KeyboardInterrupt stops the
+  parallel runner: its worker processes are terminated at once.
+* Without a terminal, each worker writes the plain status lines of its
+  features; the parallel runner prints them feature by feature.
+
 ## Limitations
 
 * **The tests run in a background thread** while the view is shown. Test code
@@ -114,7 +146,8 @@ Another runner class can run the tests (it must be a normal behave runner):
 * **Stopping a test run** raises a KeyboardInterrupt in that thread. It
   arrives when the thread executes Python code again: a long blocking call
   (like one `time.sleep(60)`) ends first.
-* **`--jobs` is not supported:** the tests run sequentially.
+* **`--jobs` needs a parallel test runner** (see: [Parallel test runs](#parallel-test-runs)).
+  With behave's own runner, the tests run sequentially.
 * A rerun reloads step files and changed Python modules of your project.
   Changes that cannot be reloaded are shown as a warning; restart behave then.
 

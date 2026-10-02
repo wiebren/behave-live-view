@@ -201,7 +201,7 @@ class TestLiveRunnerRun:
         assert runner.runner is runners[1]
 
     @pytest.mark.parametrize("command_args, expected", [
-        (["--jobs=3"], "--jobs=3 is not supported"),
+        (["--jobs=3"], "--jobs=3 needs a parallel test runner"),
         ([], ""),
     ])
     def test_warns_if_jobs_are_used(self, monkeypatch, capsys, command_args,
@@ -213,4 +213,4 @@ class TestLiveRunnerRun:
         runner.run()
         captured = capsys.readouterr()
         assert expected in captured.err
-        assert bool(expected) == ("not supported" in captured.err)
+        assert bool(expected) == ("--jobs" in captured.err)
