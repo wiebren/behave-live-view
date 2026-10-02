@@ -4,13 +4,15 @@
 (see: :mod:`behave_live_view.model`) and sends them to a renderer.
 
 * :class:`LiveFormatter`: Shows the events -- in the interactive view of
-  the :class:`~behave_live_view.host.LiveHost` (if one is active)
+  the :class:`~behave_live_view.host.LiveHost` (if one is active; in this
+  process or in the parent process of a parallel test run)
   or as plain status lines.
 """
 
 from behave.formatter.base import Formatter
 from behave_live_view import model
 from behave_live_view.plain import PlainRenderer
+from behave_live_view.remote import EventSender
 from behave.model import Rule, ScenarioOutline
 
 
@@ -268,20 +270,32 @@ class LiveFormatter(LiveEventFormatter):
     def __init__(self, stream_opener, config):
         super(LiveFormatter, self).__init__(stream_opener, config)
         self.host = None
+        self.sender = None
         self.renderer = None
         if self.stdout_mode:
             from behave_live_view.host import LiveHost
             self.host = LiveHost.current
-        if self.host is None:
+            if self.host is None:
+                # -- WORKER PROCESS: Of a parallel test run whose parent
+                # process shows the interactive view.
+                self.sender = EventSender.connect_for(config)
+        if self.host is None and self.sender is None:
             self.renderer = PlainRenderer(self.open(), config)
 
     def emit(self, event):
         if self.host is not None:
             self.host.post_event(event)
+        elif self.sender is not None:
+            self.sender.send(event)
         else:
             self.renderer.process_event(event)
 
     def close(self):
         self._finish_current_feature()
-        self.emit({"type": "testrun_finished"})
+        if self.sender is not None:
+            # -- HINT: Only the work of this process has ended (like: one
+            # feature). The host knows when the test run has ended.
+            self.sender.close()
+        else:
+            self.emit({"type": "testrun_finished"})
         self.close_stream()

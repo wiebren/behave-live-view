@@ -159,5 +159,7 @@ class LiveRunner(ITestRunner):
         jobs = getattr(self.config, "jobs", 1)
         if (isinstance(jobs, int) and jobs > 1
                 and self.runner_class_name == DEFAULT_RUNNER_CLASS_NAME):
-            sys.stderr.write("live-view: --jobs=%d is not supported, "
-                             "the tests run sequentially.\n" % jobs)
+            sys.stderr.write(
+                "live-view: --jobs=%d needs a parallel test runner, like: "
+                "-D %s=behave_parallel_runner:ParallelRunner "
+                "(the tests run sequentially).\n" % (jobs, RUNNER_PARAM_NAME))

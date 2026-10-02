@@ -11,6 +11,8 @@ Therefore, the host takes over the test run:
 * Anything that is written to stdout/stderr while the view is shown
   (summary, hook output, ...) is kept and written when the view is closed.
 * The view stays open when the test run has ended (until the user quits).
+* With ``--jobs N`` (N > 1), the host receives the events of the worker
+  processes of a parallel test runner, too (see: :mod:`behave_live_view.remote`).
 
 .. note:: The tests are executed in a background thread then.
 
@@ -30,6 +32,7 @@ from behave.formatter._registry import select_formatter_class
 from behave_live_view import clipboard, editor
 from behave_live_view.model import StatusTree
 from behave_live_view.plain import write_failures
+from behave_live_view.remote import EventReceiver, EVENTS_PARAM_NAME
 from behave_live_view.sources import SourceWatcher
 from behave_live_view.steps import (
     StepRegistrationTracker, forget_reloadable_step_definitions
@@ -188,6 +191,9 @@ class LiveHost:
     PATIENCE = 3.0      # -- Seconds until the user is told about waiting.
     DELIVERY_INTERVAL = 0.05
     MAX_EVENTS_PER_DELIVERY = 5000
+    #: Seconds to wait for the last events of other processes (worker
+    #: processes of a parallel test run) when the test run has ended.
+    REMOTE_EVENTS_TIMEOUT = 5.0
 
     def __init__(self, config, app_class):
         self.config = config
@@ -198,6 +204,7 @@ class LiveHost:
         self.failed = None
         self.error = None
         self._testrun_thread = None
+        self._receiver = None   # -- Events of other processes (or None).
         self._guard = None
         self._kept_texts = []
         self._view_is_ready = False
@@ -385,10 +392,16 @@ class LiveHost:
     def _run_testrun(self):
         self._testrun_active.set()
         self._run_count += 1
+        remote_event_count = self._count_remote_events()
         try:
             try:
                 self.failed = bool(self.runner.run())
+                self._wait_for_remote_events()
                 self._report_feature_results()
+                if self._count_remote_events() > remote_event_count:
+                    # -- PARALLEL TEST RUN: Its formatters have run in other
+                    # processes, they do not know when the test run ends.
+                    self._post({"type": "testrun_finished"})
             finally:
                 self._testrun_active.clear()
         except KeyboardInterrupt:
@@ -427,6 +440,46 @@ class LiveHost:
                             "statuses": statuses})
             except Exception:   # pylint: disable=broad-except
                 continue    # -- BEST EFFORT: Other kind of feature object.
+
+    def _count_remote_events(self):
+        receiver = self._receiver
+        return receiver.event_count if receiver is not None else 0
+
+    def _wait_for_remote_events(self):
+        """The test runner is done: Wait for the last events of the other
+        processes (they may arrive later than the results of their work).
+
+        HINT: Events that arrive after the timeout are still shown.
+        """
+        if self._receiver is not None:
+            self._receiver.wait_until_done(self.REMOTE_EVENTS_TIMEOUT)
+
+    def _listen_for_other_processes(self):
+        """Receive the events of the worker processes of a parallel test run
+        (``--jobs N``, N > 1). They get to know where (by the userdata that
+        a parallel test runner sends to them).
+        """
+        jobs = getattr(self.config, "jobs", 1)
+        userdata = getattr(self.config, "userdata", None)
+        if not (isinstance(jobs, int) and jobs > 1) or userdata is None:
+            return
+        try:
+            self._receiver = EventReceiver(self.post_event)
+        except OSError as e:
+            sys.stderr.write("live: Cannot receive the events of other "
+                             "processes (%s: %s).\n" % (e.__class__.__name__,
+                                                         e))
+            return
+        userdata[EVENTS_PARAM_NAME] = self._receiver.param_value
+
+    def _stop_listening(self):
+        receiver, self._receiver = self._receiver, None
+        if receiver is None:
+            return
+        receiver.close()
+        userdata = getattr(self.config, "userdata", None) or {}
+        if userdata.get(EVENTS_PARAM_NAME) == receiver.param_value:
+            del userdata[EVENTS_PARAM_NAME]
 
     def _start_testrun(self):
         self._testrun_thread = threading.Thread(
@@ -560,6 +613,7 @@ class LiveHost:
         view_interrupted = False
         view_problem = None
         try:
+            self._listen_for_other_processes()
             with guard:
                 try:
                     # -- HINT: Test run is started when the view is ready.
@@ -578,6 +632,7 @@ class LiveHost:
         finally:
             type(self).current = None
             step_tracker.stop()
+            self._stop_listening()
             self._write_kept_output(guard)
 
         if self._testrun_thread is None and self.error is None:
