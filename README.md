@@ -127,6 +127,10 @@ and use `behave --jobs 4` (or `-D live_view.runner=...` on the command line).
   in the parent process over a local connection (authenticated). The
   userdata parameter `live_view.events` tells the workers where; the
   parallel runner sends the userdata to its workers.
+* The view keeps still while the parallel test run runs: it does not
+  follow the running steps and does not expand failures (`e` does) --
+  many tests run at the same time. When the test run has ended, the
+  failures are expanded and the cursor is put on the first one.
 * A rerun (`r` / `R`) starts new worker processes, which load the current
   step files.
 * `q` / `ctrl+c` stops the test run like a KeyboardInterrupt stops the

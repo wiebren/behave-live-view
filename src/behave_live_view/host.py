@@ -353,12 +353,19 @@ class LiveHost:
                          on_rerun=self.rerun,
                          on_check_changes=self.check_changes,
                          on_open=self.open_in_editor,
-                         on_copy=clipboard.copy_to_clipboard)
+                         on_copy=clipboard.copy_to_clipboard,
+                         parallel=self.is_parallel)
         # -- HINT: Pass only what this view class supports (by name).
         supported = inspect.signature(self.app_class.__init__).parameters
         callbacks = dict((name, func) for name, func in callbacks.items()
                          if name in supported)
         return HostedLiveApp(**callbacks)
+
+    @property
+    def is_parallel(self):
+        """Check if the tests run in parallel (``--jobs N``, N > 1)."""
+        jobs = getattr(self.config, "jobs", 1)
+        return isinstance(jobs, int) and jobs > 1
 
     # -- TEST RUN:
     def interrupt(self):
@@ -459,9 +466,8 @@ class LiveHost:
         (``--jobs N``, N > 1). They get to know where (by the userdata that
         a parallel test runner sends to them).
         """
-        jobs = getattr(self.config, "jobs", 1)
         userdata = getattr(self.config, "userdata", None)
-        if not (isinstance(jobs, int) and jobs > 1) or userdata is None:
+        if not self.is_parallel or userdata is None:
             return
         try:
             self._receiver = EventReceiver(self.post_event)

@@ -278,6 +278,20 @@ class TestLiveHostWithWorkers:
         host.run(fake_runner)
         assert seen == [{}]
 
+    @pytest.mark.parametrize("command_args, parallel", [
+        (["--jobs=2"], True),
+        ([], False),
+    ])
+    def test_view_knows_if_the_testrun_is_parallel(self, command_args,
+                                                   parallel):
+        class ParallelAwareApp(FakeApp):
+            def __init__(self, parallel=False, **kwargs):
+                super(ParallelAwareApp, self).__init__(**kwargs)
+                self.parallel = parallel
+
+        host = LiveHost(make_config(command_args), ParallelAwareApp)
+        assert host.make_app().parallel is parallel
+
     def test_sequential_testrun_is_not_ended_by_the_host(self):
         # -- HINT: Its own "live" formatter ends it (see: LiveFormatter).
         host = LiveHost(make_config(["--jobs=2"]), FakeApp)

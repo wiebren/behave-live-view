@@ -150,7 +150,8 @@ async def send_run(pilot, events):
 
 def run_app(test_coroutine, status_tree=None, on_interrupt=None,
             on_rerun=None, on_check_changes=None, on_open=None,
-            on_copy=None, notifications=False, size=(100, 40)):
+            on_copy=None, notifications=False, size=(100, 40),
+            parallel=False):
     """Run one async test function with a LiveApp (headless).
 
     :param test_coroutine:  Async function: ``func(pilot, app)``.
@@ -158,7 +159,7 @@ def run_app(test_coroutine, status_tree=None, on_interrupt=None,
     """
     app = LiveApp(status_tree=status_tree, on_interrupt=on_interrupt,
                   on_rerun=on_rerun, on_check_changes=on_check_changes,
-                  on_open=on_open, on_copy=on_copy)
+                  on_open=on_open, on_copy=on_copy, parallel=parallel)
 
     async def run_test():
         async with app.run_test(size=size,
@@ -883,6 +884,59 @@ def test_followed_testrun_ends_with_the_cursor_on_the_first_failure():
         assert app.tree_view.cursor_node.data is select_scenario(app, ALICE, 0)
 
     run_app(check)
+
+
+def interleave(*event_lists):
+    """Mix the events of tests that run at the same time (parallel)."""
+    events = []
+    for index in range(max(len(event_list) for event_list in event_lists)):
+        for event_list in event_lists:
+            if index < len(event_list):
+                events.append(event_list[index])
+    return events
+
+
+def test_parallel_testrun_does_not_expand_the_tree_while_it_runs():
+    # -- HINT: Many tests run at the same time. Following their execution
+    # points and expanding their failures would let the lines jump.
+    async def check(pilot, app):
+        await send_events(pilot, [
+            {"type": "feature_started",
+             "feature": make_feature(ALICE, "Alice", 2)},
+            {"type": "feature_started",
+             "feature": make_feature(BOB, "Bob", 1)}])
+        cursor_node = app.tree_view.cursor_node
+        await send_run(pilot, interleave(
+            step_events(ALICE, 0, failed_step=1) + step_events(ALICE, 1),
+            step_events(BOB, 0)))
+        assert app.follow is True
+        assert visible_labels(app)[0].startswith(u"✘ Feature: Alice")
+        assert len(visible_labels(app)) == 2    # -- COLLAPSED: Features.
+        assert app.tree_view.cursor_node is cursor_node
+
+        # -- TEST RUN HAS ENDED: Show the failures, cursor on the first one.
+        await send_events(pilot, [{"type": "testrun_finished"}])
+        app.testrun_done(True)
+        await settle(pilot)
+        labels = visible_labels(app)
+        assert u"Assertion Failed: 1 != 2" in labels
+        assert app.tree_view.cursor_node.data is select_scenario(app, ALICE, 0)
+
+    run_app(check, parallel=True)
+
+
+def test_parallel_testrun_expands_the_failures_on_request():
+    async def check(pilot, app):
+        await send_events(pilot, [
+            {"type": "feature_started",
+             "feature": make_feature(ALICE, "Alice", 1)}])
+        await send_run(pilot, step_events(ALICE, 0, failed_step=1))
+        assert u"Assertion Failed: 1 != 2" not in visible_labels(app)
+        await pilot.press("e")
+        await settle(pilot)
+        assert u"Assertion Failed: 1 != 2" in visible_labels(app)
+
+    run_app(check, parallel=True)
 
 
 def test_testrun_end_keeps_the_cursor_where_the_user_has_put_it():
